@@ -134,8 +134,6 @@ struct boss_kelthuzadAI : public BossAI
             m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
 
             DoScriptText(EMOTE_PHASE2, m_creature);
-
-            BossAI::Aggro();
         });
         AddCustomAction(KELTHUZAD_SUMMON_SOLDIER, true, [&]()
         {
@@ -234,8 +232,6 @@ struct boss_kelthuzadAI : public BossAI
 
     void Aggro(Unit* enemy) override
     {
-        if (m_uiPhase != PHASE_INTRO)
-            return;
         ResetTimer(KELTHUZAD_COMBAT_PHASE, 3min + 48s);
         DoScriptText(SAY_SUMMON_MINIONS, m_creature);
         DoCastSpellIfCan(nullptr, SPELL_CHANNEL_VISUAL);
@@ -365,18 +361,18 @@ struct boss_kelthuzadAI : public BossAI
         m_creature->SummonCreature(uiType, fX, fY, fZ, 0.0f, TEMPSPAWN_CORPSE_DESPAWN, 5000);
     }
 
-    void JustSummoned(Creature* pSummoned) override
+    void JustSummoned(Creature* summoned) override
     {
-        switch (pSummoned->GetEntry())
+        switch (summoned->GetEntry())
         {
             case NPC_GUARDIAN:
             {
                 DoScriptText(EMOTE_GUARDIAN, m_creature);
 
-                m_lAddsSet.insert(pSummoned->GetObjectGuid());
+                m_lAddsSet.insert(summoned->GetObjectGuid());
                 ++m_uiGuardiansCount;
 
-                pSummoned->SetInCombatWithZone();
+                summoned->SetInCombatWithZone();
                 break;
             }
             case NPC_SOLDIER_FROZEN:
@@ -384,16 +380,16 @@ struct boss_kelthuzadAI : public BossAI
             case NPC_SOUL_WEAVER:
             {
                 if (m_uiIntroPackCount < 7)
-                    m_lIntroMobsSet.insert(pSummoned->GetObjectGuid());
+                    m_lIntroMobsSet.insert(summoned->GetObjectGuid());
                 else
                 {
-                    m_lAddsSet.insert(pSummoned->GetObjectGuid());
+                    m_lAddsSet.insert(summoned->GetObjectGuid());
 
                     if (m_instance)
                     {
                         float fX, fY, fZ;
                         m_instance->GetChamberCenterCoords(fX, fY, fZ);
-                        pSummoned->GetMotionMaster()->MovePoint(0, fX, fY, fZ);
+                        summoned->GetMotionMaster()->MovePoint(0, fX, fY, fZ);
                     }
                 }
 
@@ -402,17 +398,17 @@ struct boss_kelthuzadAI : public BossAI
         }
     }
 
-    void SummonedCreatureJustDied(Creature* pSummoned) override
+    void SummonedCreatureJustDied(Creature* summoned) override
     {
-        switch (pSummoned->GetEntry())
+        switch (summoned->GetEntry())
         {
             case NPC_GUARDIAN:
             case NPC_SOLDIER_FROZEN:
             case NPC_SOUL_WEAVER:
-                m_lAddsSet.erase(pSummoned->GetObjectGuid());
+                m_lAddsSet.erase(summoned->GetObjectGuid());
                 break;
             case NPC_UNSTOPPABLE_ABOM:
-                m_lAddsSet.erase(pSummoned->GetObjectGuid());
+                m_lAddsSet.erase(summoned->GetObjectGuid());
 
                 ++m_uiKilledAbomination;
                 if (m_uiKilledAbomination >= ACHIEV_REQ_KILLED_ABOMINATIONS)
@@ -422,10 +418,20 @@ struct boss_kelthuzadAI : public BossAI
         }
     }
 
-    void SummonedMovementInform(Creature* pSummoned, uint32 uiMotionType, uint32 uiPointId) override
+    void SummonedMovementInform(Creature* summoned, uint32 motionType, uint32 pointId) override
     {
-        if (uiMotionType == POINT_MOTION_TYPE && uiPointId == 0)
-            pSummoned->SetInCombatWithZone();
+        if (motionType == POINT_MOTION_TYPE && pointId == 0)
+            summoned->SetInCombatWithZone();
+    }
+
+    void OnSpellCast(SpellEntry const* spellInfo, Unit* target) override
+    {
+        switch (spellInfo->Id)
+        {
+			case SPELL_CHAINS_OF_KELTHUZAD: DoScriptText(urand(0, 1) ? SAY_CHAIN1 : SAY_CHAIN2, m_creature); break;
+            case SPELL_FROST_BLAST: if (urand(0, 1)) DoScriptText(SAY_FROST_BLAST, m_creature); break;
+            case SPELL_MANA_DETONATION: if (urand(0, 1)) DoScriptText(SAY_SPECIAL1_MANA_DET, m_creature); break;
+        }
     }
 
     std::chrono::milliseconds GetSubsequentActionTimer(uint32 action)
@@ -471,12 +477,10 @@ struct boss_kelthuzadAI : public BossAI
             }
             case KELTHUZAD_MANA_DETONATION:
             {
-                if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, SPELL_MANA_DETONATION, SELECT_FLAG_PLAYER | SELECT_FLAG_POWER_MANA))
+                if (Unit* target = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, SPELL_MANA_DETONATION, SELECT_FLAG_PLAYER | SELECT_FLAG_POWER_MANA))
                 {
-                    if (DoCastSpellIfCan(pTarget, SPELL_MANA_DETONATION) == CAST_OK)
+                    if (DoCastSpellIfCan(target, SPELL_MANA_DETONATION) == CAST_OK)
                     {
-                        if (urand(0, 1))
-                            DoScriptText(SAY_SPECIAL1_MANA_DET, m_creature);
 
                         break;
                     }
@@ -496,8 +500,8 @@ struct boss_kelthuzadAI : public BossAI
             {
                 if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_FROST_BLAST) == CAST_OK)
                 {
-                    if (urand(0, 1))
-                        DoScriptText(SAY_FROST_BLAST, m_creature);
+                    
+                        
 
                     break;
                 }
@@ -512,7 +516,7 @@ struct boss_kelthuzadAI : public BossAI
                 }
                 if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_CHAINS_OF_KELTHUZAD) == CAST_OK)
                 {
-                    DoScriptText(urand(0, 1) ? SAY_CHAIN1 : SAY_CHAIN2, m_creature);
+
 
                     break;
                 }
