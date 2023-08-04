@@ -1623,7 +1623,9 @@ void World::Update(uint32 diff)
     if (m_timers[WUPDATE_AUCTIONS].Passed())
     {
         m_timers[WUPDATE_AUCTIONS].Reset();
-
+		
+		//Keep Database alive
+		LoginDatabase.Ping();
         ///- Update mails (return old mails with item, or delete them)
         //(tested... works on win)
         if (++mail_timer > mail_timer_expires)
